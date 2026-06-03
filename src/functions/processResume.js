@@ -20,12 +20,19 @@ app.storageBlob('processResumeBlob', {
         }
 
         try {
-            // 1. OCR Started
+            const blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
+            
+            // 1. Manually download the blob as a reliable Buffer
+            const sourceContainerClient = blobServiceClient.getContainerClient("resumes");
+            const sourceBlobClient = sourceContainerClient.getBlobClient(fileName);
+            const pdfBuffer = await sourceBlobClient.downloadToBuffer();
+
+            // 2. OCR Started
             context.log('OCR started');
             const client = new DocumentAnalysisClient(endpoint, new AzureKeyCredential(apiKey));
             
-            // Send the blob buffer to Document Intelligence using prebuilt-read
-            const poller = await client.beginAnalyzeDocument("prebuilt-read", blob);
+            // Send the reliable blob buffer to Document Intelligence using prebuilt-read
+            const poller = await client.beginAnalyzeDocument("prebuilt-read", pdfBuffer);
             
             // Poll for completion
             const { content: rawText } = await poller.pollUntilDone();
@@ -45,7 +52,6 @@ app.storageBlob('processResumeBlob', {
             const jsonString = JSON.stringify(outputJson, null, 2);
             
             // 3. Upload JSON to processed container
-            const blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
             const containerClient = blobServiceClient.getContainerClient(processedContainerName);
             
             // Create container if it doesn't exist
